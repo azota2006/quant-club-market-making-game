@@ -5,7 +5,7 @@ Players quote two-sided markets on "commodities" whose true value is hidden unti
 the end of the round. Runs on a host laptop over local WiFi; everyone else joins
 from a phone browser with a 4-character code. No accounts, no database.
 
-Built from `market-making-game-prd.md`.
+Built to a written product spec for a quant club game night.
 
 ---
 
@@ -26,7 +26,7 @@ The server prints the addresses to share:
 
 ```
   Host dashboard:  http://localhost:3000
-  Players join at: http://10.1.12.225:3000   (Wi-Fi)
+  Players join at: http://192.168.1.42:3000   (Wi-Fi)
 ```
 
 Open the dashboard on the host laptop, click **Create a game**, and read the
@@ -36,12 +36,12 @@ the join URL, which is the fastest way to get 15 phones onto the right page.
 Change the port with `set PORT=4000` before `start.cmd` (or `$env:PORT=4000` in
 PowerShell).
 
-### On this machine
+### Requirements
 
-Node was not installed, so Node 24.20.0 LTS was unpacked to
-`%LOCALAPPDATA%\Programs\nodejs` and added to your user `PATH`. It is a plain
-folder — delete it to uninstall. Open a **new** terminal so the PATH change is
-picked up, then `npm start` from this directory.
+Node 18 or newer (developed on 24.20.0 LTS). Nothing else — no database and
+no external services. If you cannot install Node system-wide, the official
+Windows .zip build unpacks anywhere and needs no admin rights; put that folder
+on your PATH and open a new terminal.
 
 ### PowerShell blocks npm
 
@@ -49,10 +49,11 @@ picked up, then `npm start` from this directory.
 npm : File ...\npm.ps1 cannot be loaded because running scripts is disabled on this system.
 ```
 
-PowerShell's execution policy is `Restricted` (both `CurrentUser` and
-`LocalMachine` are Undefined, so it falls back to the default), and npm ships a
-PowerShell wrapper, `npm.ps1`, that gets blocked. Nothing is wrong with the Node
-install — this affects every npm package on the machine, not just this project.
+npm ships a PowerShell wrapper, npm.ps1, which PowerShell refuses to run when
+the execution policy is `Restricted` — the Windows default when neither the
+`CurrentUser` nor `LocalMachine` scope has been set. Check yours with
+`Get-ExecutionPolicy -List`. Nothing is wrong with the Node install; this
+affects every npm package on the machine, not just this project.
 
 Three ways round it, cheapest first:
 
