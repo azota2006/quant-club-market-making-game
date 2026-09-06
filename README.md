@@ -5,7 +5,46 @@ Players quote two-sided markets on "commodities" whose true value is hidden unti
 the end of the round. Runs on a host laptop over local WiFi; everyone else joins
 from a phone browser with a 4-character code. No accounts, no database.
 
-Built to a written product spec for a quant club game night.
+Built to a written product spec.
+
+---
+
+## At a glance
+
+**What players do.** Every commodity is a card suit. You are dealt a private hand
+and never see anyone else's. For each commodity you post a bid and an ask, and
+anybody can trade against your quote at any moment. You are trading a *number*,
+not the cards themselves — like a futures contract that settles at whatever that
+suit turns out to be worth.
+
+**Where the number comes from.** A commodity's true value is the sum of the card
+ranks (A=1 … K=13) of that suit that were actually dealt into someone's hand.
+Cards left over after the deal are discarded and count for nothing — which is
+what makes the value genuinely unknown rather than a fixed constant. Your own
+hand is a guaranteed floor; the rest you have to estimate.
+
+**How you win.** At Reveal:
+`P&L = (cash made trading) + (position held × true value)`.
+Quoting a tight two-sided market and ending flat earns the spread no matter what
+the reveal says; carrying a position is a bet on it. Every round is exactly zero
+sum. Scores accumulate across rounds, and the highest total wins the night.
+
+**A round, start to finish.** Host deals → players study their hands → trading
+opens on a clock → trading closes → Reveal scores everyone and shows what each
+trade was actually worth.
+
+### What's in the repository
+
+| Path | What it holds |
+|---|---|
+| `server/engine.js` | Pure game maths — deck, shuffle, deal, true values, scoring |
+| `server/session.js` | Session state, phase machine, quote and trade rules, redaction |
+| `server/index.js` | Express + Socket.IO wiring, round timer, join URL and QR code |
+| `public/` | The entire client: one HTML shell, one JS file, one stylesheet |
+| `test/` | 110 tests — engine maths, session rules, live sockets, and the UI in jsdom |
+
+About 3,600 lines of application code and 2,100 of tests. No build step, and no
+runtime dependencies beyond Express, Socket.IO and a QR-code generator.
 
 ---
 
