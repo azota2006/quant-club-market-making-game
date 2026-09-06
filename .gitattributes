@@ -1,0 +1,6 @@
+* text=auto
+
+# Batch files must keep CRLF: cmd.exe mis-parses LF-only .cmd files and eats
+# the first characters of lines.
+*.cmd text eol=crlf
+*.bat text eol=crlf

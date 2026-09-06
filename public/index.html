@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0e1116" />
+<title>Market Making Game</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>📈</text></svg>" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+<header class="topbar" id="topbar" hidden>
+  <div class="topbar-left">
+    <span class="pill" id="top-round">Round 1</span>
+    <span class="pill phase" id="top-phase">Lobby</span>
+  </div>
+  <div class="topbar-mid">
+    <span class="clock" id="top-clock"></span>
+  </div>
+  <div class="topbar-right">
+    <span class="who" id="top-who"></span>
+    <button class="linkish" id="top-rules" type="button">Rules</button>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ------------------------------------------------------------ landing -->
+  <section class="screen active" id="screen-landing">
+    <div class="hero">
+      <h1>Market&nbsp;Making<br />Game</h1>
+      <p class="tagline">Quote a two-sided market. Trade a number nobody knows yet.</p>
+    </div>
+
+    <form class="card" id="join-form" autocomplete="off">
+      <h2>Join a game</h2>
+      <label class="field">
+        <span>Game code</span>
+        <input id="join-code" name="code" maxlength="4" inputmode="text"
+               autocapitalize="characters" spellcheck="false" placeholder="ABCD" required />
+      </label>
+      <label class="field">
+        <span>Your name</span>
+        <input id="join-name" name="name" maxlength="20" placeholder="e.g. Priya" required />
+      </label>
+      <button class="btn primary big" type="submit">Join game</button>
+    </form>
+
+    <div class="stack">
+      <button class="btn ghost" id="btn-show-rules" type="button">How to play</button>
+      <button class="btn ghost" id="btn-show-create" type="button">Create a game (host)</button>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------- create -->
+  <section class="screen" id="screen-create">
+    <form class="card" id="create-form" autocomplete="off">
+      <h2>Create a game</h2>
+
+      <label class="field">
+        <span>Your name (host)</span>
+        <input id="create-name" maxlength="20" placeholder="Host" required />
+      </label>
+
+      <fieldset class="field">
+        <legend>Commodities <em>(pick 2&ndash;4)</em></legend>
+        <div class="commodity-picker" id="commodity-picker"></div>
+        <p class="hint">Flavour names are cosmetic. Leave blank to use the suit name.</p>
+      </fieldset>
+
+      <div class="grid2">
+        <label class="field">
+          <span>Decks</span>
+          <select id="cfg-decks">
+            <option value="1">1 deck</option>
+            <option value="2" selected>2 decks</option>
+            <option value="3">3 decks</option>
+            <option value="4">4 decks</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Max cards / player</span>
+          <input id="cfg-maxcards" type="number" min="1" max="26" value="8" inputmode="numeric" />
+        </label>
+        <label class="field">
+          <span>Starting cash</span>
+          <input id="cfg-cash" type="number" min="0" step="1" value="0" inputmode="numeric" />
+        </label>
+        <label class="field">
+          <span>Round length (min)</span>
+          <input id="cfg-duration" type="number" min="1" max="60" step="0.5" value="8" inputmode="decimal" />
+        </label>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="cfg-hostplays" />
+        <span>Host also plays <em>(deal me a hand too)</em></span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="cfg-onefill" />
+        <span>Quote expires after one fill <em>(off = standing quotes, the default)</em></span>
+      </label>
+
+      <p class="hint">2 decks suits 10+ players; 1 deck is tighter for a small group.
+      Fewer cards per player means more cards discarded &mdash; and more genuine uncertainty.
+      You can change any of this between rounds.</p>
+
+      <button class="btn primary big" type="submit">Create game</button>
+      <button class="btn ghost" type="button" id="create-back">Back</button>
+    </form>
+  </section>
+
+  <!-- -------------------------------------------------------------- lobby -->
+  <section class="screen" id="screen-lobby">
+    <div class="card center">
+      <p class="label">Game code</p>
+      <p class="code-big" id="lobby-code">----</p>
+      <p class="muted" id="lobby-status">Waiting for the host to deal&hellip;</p>
+    </div>
+    <div class="card">
+      <h2>In the room <span class="count" id="lobby-count"></span></h2>
+      <ul class="roster" id="lobby-roster"></ul>
+    </div>
+    <div class="card" id="lobby-params"></div>
+  </section>
+
+  <!-- --------------------------------------------------------------- host -->
+  <section class="screen" id="screen-host">
+    <div id="host-body"></div>
+  </section>
+
+  <!-- --------------------------------------------------------------- play -->
+  <section class="screen" id="screen-play">
+    <div id="play-body"></div>
+  </section>
+
+  <!-- ------------------------------------------------------------- reveal -->
+  <section class="screen" id="screen-reveal">
+    <div id="reveal-body"></div>
+  </section>
+
+</main>
+
+<!-- ---------------------------------------------------------------- rules -->
+<div class="modal" id="rules" hidden>
+  <div class="modal-inner" role="dialog" aria-modal="true" aria-label="How to play">
+    <header class="modal-head">
+      <h2>How to play</h2>
+      <button class="btn ghost small" id="rules-close" type="button">Close</button>
+    </header>
+
+    <div class="modal-body">
+      <section class="rule">
+        <h3>1 &middot; What this is</h3>
+        <p>You're a market maker quoting live prices on a handful of <b>commodities</b>. Each
+        commodity's true value is secretly determined by a shuffled deck of cards. You are never
+        trading anyone's actual cards &mdash; you're trading <b>a number</b>, like a futures
+        contract that pays out whatever the true value turns out to be.</p>
+      </section>
+
+      <section class="rule">
+        <h3>2 &middot; Where the number comes from</h3>
+        <p>Each commodity is a suit. Its true value is the sum of the ranks
+        (<b>A=1, 2&ndash;10 face value, J=11, Q=12, K=13</b>) of <b>only the cards of that suit that
+        actually got dealt into someone's hand</b>. Cards left over after dealing are discarded and
+        count toward nothing. Nobody &mdash; not even the host &mdash; knows this number until Reveal.</p>
+      </section>
+
+      <section class="rule">
+        <h3>3 &middot; Your edge</h3>
+        <p>You only ever see your own hand. That's a guaranteed <em>floor</em> for any commodity you
+        hold cards in. Combine it with the public game numbers on your screen (decks in play, active
+        commodities, cards per player, players in the round) to estimate the rest: every card in a
+        suit averages rank 7, so you can put a number on the cards you can't see.</p>
+        <p>That gives you a personal fair value &mdash; different from everyone else's, because
+        everyone's hand is different. That difference is what makes a market worth making.</p>
+      </section>
+
+      <section class="rule">
+        <h3>4 &middot; How trading works</h3>
+        <p>For each commodity you post a <b>bid</b> (what you'll pay) and an <b>ask</b> (what you'll
+        sell for). Either side can be left blank. Anyone can <b>Lift</b> your ask or <b>Hit</b> your
+        bid at any time, and your quote <b>stays live</b> until you change or clear it &mdash; so a
+        bad price can be hit again and again.</p>
+        <p>Every trade is exactly 1 unit; click repeatedly to build size. A trade moves cash and
+        position between the two of you. It never moves cards.</p>
+      </section>
+
+      <section class="rule">
+        <h3>5 &middot; How you win</h3>
+        <p>At Reveal, every commodity's true value is shown. Your round P&amp;L is:</p>
+        <p class="formula">(cash now &minus; starting cash) &nbsp;+&nbsp; &Sigma; (your position &times; true value)</p>
+        <p>Highest total across all rounds wins the night.</p>
+      </section>
+
+      <section class="rule worked">
+        <h3>6 &middot; Worked example</h3>
+        <ol>
+          <li>2 decks, 4 suits, 16 players &rarr; a <b>104-card</b> deck, <b>6 cards each</b>.</li>
+          <li>96 cards get dealt; <b>8 are discarded</b> and gone for good.</li>
+          <li>You're dealt <b>2 Hearts summing to 9</b>.</li>
+          <li>Hearts should be about a quarter of the 96 dealt cards &rarr; roughly <b>24 Hearts</b>
+              out there, so about <b>22 you can't see</b>.</li>
+          <li>22 unseen cards &times; average rank 7 &asymp; <b>154</b>.</li>
+          <li>Your personal fair value for Hearts &asymp; 9 + 154 = <b>163</b>. You quote
+              <b>158 / 168</b>.</li>
+          <li>Someone lifts your 168 &rarr; your cash <b>+168</b>, your Hearts position <b>&minus;1</b>.
+              Theirs: cash <b>&minus;168</b>, position <b>+1</b>.</li>
+          <li>Hearts reveals at <b>172</b>. They were long into a higher value: <b>+4</b>.
+              You were short: <b>&minus;4</b>. No cards ever changed hands.</li>
+        </ol>
+      </section>
+    </div>
+
+    <footer class="modal-foot">
+      <button class="btn primary big" id="rules-got-it" type="button">Got it, take me in</button>
+    </footer>
+  </div>
+</div>
+
+<div id="toasts" aria-live="polite"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
