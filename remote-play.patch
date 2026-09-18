@@ -1,0 +1,263 @@
+From a418623a0963f66228bf78948c949cdd2a4769f7 Mon Sep 17 00:00:00 2001
+From: alwaysafoujdar <akfaujdar646@gmail.com>
+Date: Fri, 18 Sep 2026 19:34:04 +0530
+Subject: [PATCH] Let players join from any network, not just the host's WiFi
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Campus networks isolate clients from one another, so the LAN join URL is
+unreachable for half the room even when everyone has full bars.
+
+Nothing in the game needed a LAN — the client already connects to whatever
+origin served it. The one exception was /api/network, which built the join URL
+and QR code from os.networkInterfaces() and so kept advertising 192.168.x.x
+however the server was actually reached.
+
+The join URL is now resolved in order: PUBLIC_URL if set, then the first hop of
+X-Forwarded-Proto/Host when the request came through a tunnel or platform
+proxy, and otherwise the host's IPv4 as before. The LAN address list is
+suppressed when remote, since those addresses would only mislead. Existing
+same-WiFi behaviour is unchanged.
+
+README documents both routes: a Cloudflare quick tunnel from the host laptop,
+and deploying to a free Node host, with the single-instance and restart caveats
+that in-memory state implies.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ README.md                | 86 ++++++++++++++++++++++++++++++++++++++--
+ server/index.js          | 27 +++++++++++--
+ test/integration.test.js | 46 +++++++++++++++++++++
+ 3 files changed, 152 insertions(+), 7 deletions(-)
+
+diff --git a/README.md b/README.md
+index 7f32966..82a80f0 100644
+--- a/README.md
++++ b/README.md
+@@ -2,8 +2,9 @@
+ 
+ A live, multiplayer market-making game for an in-person quant club game night.
+ Players quote two-sided markets on "commodities" whose true value is hidden until
+-the end of the round. Runs on a host laptop over local WiFi; everyone else joins
+-from a phone browser with a 4-character code. No accounts, no database.
++the end of the round. Runs on a host laptop over local WiFi — or over a tunnel
++when the room can't share one network; everyone else joins from a phone browser
++with a 4-character code. No accounts, no database.
+ 
+ Built to a written product spec.
+ 
+@@ -41,7 +42,7 @@ trade was actually worth.
+ | `server/session.js` | Session state, phase machine, quote and trade rules, redaction |
+ | `server/index.js` | Express + Socket.IO wiring, round timer, join URL and QR code |
+ | `public/` | The entire client: one HTML shell, one JS file, one stylesheet |
+-| `test/` | 110 tests — engine maths, session rules, live sockets, and the UI in jsdom |
++| `test/` | 114 tests — engine maths, session rules, live sockets, and the UI in jsdom |
+ 
+ About 3,600 lines of application code and 2,100 of tests. No build step, and no
+ runtime dependencies beyond Express, Socket.IO and a QR-code generator.
+@@ -114,6 +115,81 @@ prompt, allow it under Windows Security → Firewall → Allow an app.
+ 
+ ---
+ 
++## When everyone can't be on one WiFi
++
++Campus networks often isolate clients from each other, cap the guest SSID, or
++put phones and laptops on separate VLANs — so `192.168.x.x:3000` is unreachable
++even when every device shows full bars. Nothing in the game actually requires a
++LAN: the client connects to whatever origin served it, so all that's needed is a
++public address pointing at the host laptop.
++
++### Option A — Cloudflare Tunnel (recommended)
++
++Outbound-only, so it needs no port forwarding, no router access and no admin
++rights on the network. Install once:
++
++```
++winget install --id Cloudflare.cloudflared
++```
++
++Start the game as usual with `.\start.cmd`, then in a second terminal:
++
++```
++cloudflared tunnel --url http://localhost:3000
++```
++
++It prints an `https://<random-words>.trycloudflare.com` address. Open the
++dashboard on that URL rather than `localhost`, and the QR code and join link
++will point at it automatically. Players can then be on campus WiFi, mobile
++data, or at home.
++
++Two things this buys beyond reach: HTTPS, so phones don't warn on the join page;
++and a player whose phone falls off WiFi onto mobile data stays connected instead
++of dropping out of the round.
++
++The quick-tunnel URL changes every run, which is fine for a game night — the QR
++code is regenerated from it each time. A named tunnel on a Cloudflare account
++gives a stable hostname if you'd rather have one.
++
++### Option B — deploy it
++
++Any Node host with a free tier works (Render, Railway, Fly). Build command
++`npm install`, start command `npm start`; the platform supplies `PORT`. Then
++there's no host laptop in the loop and the URL is permanent, which suits a
++recurring club event.
++
++State is in memory, so three things follow:
++
++- **Run exactly one instance.** Two instances are two disjoint game worlds, and
++  players land in whichever one the load balancer picks.
++- **Free tiers sleep when idle.** Hit the URL a few minutes before you start so
++  the cold boot isn't happening mid-lobby. Traffic during a round keeps it up.
++- **A restart wipes the session**, the same as losing the laptop would. Fine for
++  one night; just don't redeploy mid-game.
++
++Set `PUBLIC_URL` to the deployed address (`https://your-app.onrender.com`) so
++the join link and QR read correctly.
++
++### How the join URL is chosen
++
++`/api/network` picks, in order:
++
++1. `PUBLIC_URL`, if set — always wins, for a known fixed address.
++2. The `X-Forwarded-Proto` / `X-Forwarded-Host` pair, when the request came
++   through a tunnel or a platform proxy.
++3. Otherwise the host's first non-internal IPv4 and `PORT` — the LAN behaviour,
++   unchanged.
++
++### One caveat
++
++A public address means anyone with the link reaches the lobby. Joining still
++needs the 4-character code — roughly a million combinations, with ambiguous
++characters left out — so nobody stumbles in by accident, but that code is the
++only gate and the host can remove strays from the roster. Worth not posting the
++tunnel URL anywhere public before the event.
++
++---
++
+ ## Running a game night
+ 
+ The host drives every phase from the dashboard:
+@@ -313,7 +389,7 @@ npm.cmd test
+ 
+ (`npm.cmd`, not `npm` — see "PowerShell blocks npm" above.)
+ 
+-110 tests, no external services. Highlights, mapped to the PRD's acceptance
++114 tests, no external services. Highlights, mapped to the PRD's acceptance
+ criteria:
+ 
+ - 20 players deal, quote, and trade concurrently; the round scores zero sum.
+@@ -329,6 +405,8 @@ criteria:
+   leaderboard carries over.
+ - A first-time joiner sees the rules before the lobby; a returning one does not,
+   but can reopen them mid-round without leaving the trading view.
++- The join URL follows the origin the request arrived on, so the QR code names a
++  tunnel or deployed address when there is one and the LAN IP otherwise.
+ 
+ ---
+ 
+diff --git a/server/index.js b/server/index.js
+index 05a75e1..35e6e20 100644
+--- a/server/index.js
++++ b/server/index.js
+@@ -39,10 +39,28 @@ function localAddresses() {
+   return out;
+ }
+ 
+-app.get('/api/network', async (req, res) => {
++/**
++ * The URL to put on the QR code. Over plain LAN that is a local IPv4, but
++ * behind a tunnel or a cloud host the LAN address is unreachable — what players
++ * need is the public origin their own request arrived on.
++ */
++function joinUrl(req) {
++  const configured = (process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '');
++  if (configured) return { url: configured, remote: true };
++
++  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
++  const host = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim() || req.get('host');
++  if (proto && host) return { url: `${proto}://${host}`, remote: true };
++
+   const addresses = localAddresses();
+   const primary = addresses.length ? addresses[0].address : 'localhost';
+-  const url = `http://${primary}:${PORT}`;
++  return { url: `http://${primary}:${PORT}`, remote: false };
++}
++
++app.get('/api/network', async (req, res) => {
++  const { url, remote } = joinUrl(req);
++  // Only meaningful on a LAN; over a tunnel the extra IPs would just mislead.
++  const addresses = remote ? [] : localAddresses();
+   let qr = null;
+   try {
+     qr = await QRCode.toDataURL(url, { margin: 1, width: 320 });
+@@ -423,8 +441,11 @@ server.listen(PORT, HOST, () => {
+   if (!addresses.length) {
+     lines.push('  No local network address found — players must be on this machine.');
+   }
++  if (process.env.PUBLIC_URL) {
++    lines.push(`  Public URL:      ${process.env.PUBLIC_URL}   (players can be on any network)`);
++  }
+   lines.push('');
+-  lines.push('  Everyone must be on the same WiFi. Ctrl+C to stop.');
++  lines.push('  Ctrl+C to stop.');
+   lines.push('');
+   console.log(lines.join('\n'));
+ });
+diff --git a/test/integration.test.js b/test/integration.test.js
+index 993a993..2aada06 100644
+--- a/test/integration.test.js
++++ b/test/integration.test.js
+@@ -593,3 +593,49 @@ test('a 20-player table deals, quotes and trades without dropping anything', asy
+   assert.equal(seller.holdings.S, -19);
+   assert.equal(seller.cashDelta, 219 * 19);
+ });
++
++// --------------------------------------------- the join URL players get given
++
++/**
++ * The QR code is the only thing 15 phones actually use, so it has to name an
++ * address they can reach. On a LAN that is the host's IPv4; behind a tunnel or
++ * a platform proxy the LAN address is useless and the public origin is what
++ * matters.
++ */
++function network(headers) {
++  return fetch(`${baseUrl}/api/network`, { headers: headers || {} }).then((r) => r.json());
++}
++
++test('the join URL falls back to the LAN address when nothing is in front', async () => {
++  const info = await network();
++  assert.match(info.url, /^http:\/\/(\d+\.\d+\.\d+\.\d+|localhost):\d+$/);
++  assert.ok(info.qr.startsWith('data:image/png;base64,'));
++});
++
++test('a proxied request is told the public origin it arrived on, not a LAN IP', async () => {
++  const info = await network({
++    'X-Forwarded-Proto': 'https',
++    'X-Forwarded-Host': 'game.trycloudflare.com',
++  });
++  assert.equal(info.url, 'https://game.trycloudflare.com');
++  // The LAN list would only offer players addresses they cannot route to.
++  assert.deepEqual(info.addresses, []);
++});
++
++test('only the first hop of a forwarded header chain is trusted', async () => {
++  const info = await network({
++    'X-Forwarded-Proto': 'https, http',
++    'X-Forwarded-Host': 'game.trycloudflare.com, internal.lb',
++  });
++  assert.equal(info.url, 'https://game.trycloudflare.com');
++});
++
++test('PUBLIC_URL overrides everything and loses a trailing slash', async () => {
++  process.env.PUBLIC_URL = 'https://mm.ashokaquantfin.org/';
++  try {
++    const info = await network({ 'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': 'ignored.example' });
++    assert.equal(info.url, 'https://mm.ashokaquantfin.org');
++  } finally {
++    delete process.env.PUBLIC_URL;
++  }
++});
+-- 
+2.50.1 (Apple Git-155)
+
